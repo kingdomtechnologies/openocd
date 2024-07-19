@@ -37,6 +37,7 @@
  *  -srst and trst open drain/ push pull
  *  -configurable active high/low for srst & trst
  */
+// /home/kingdom/openocd-code/src/jtag/drivers/sysfsgpio.c
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -46,6 +47,7 @@
 #include <transport/transport.h>
 #include "bitbang.h"
 
+static const char *gpio_tbl[500];
 /*
  * Helper func to determine if gpio number valid
  *
@@ -80,12 +82,15 @@ static int open_write_close(const char *name, const char *valstr)
  */
 static void unexport_sysfs_gpio(int gpio)
 {
-	char gpiostr[5];
+	char gpiostr[6];
+	gpio_tbl[399] = "PI.00";
+	gpio_tbl[400] = "PI.01";
+	gpio_tbl[472] = "PY.02";
 
 	if (!is_gpio_valid(gpio))
 		return;
 
-	snprintf(gpiostr, sizeof(gpiostr), "%d", gpio);
+	snprintf(gpiostr, sizeof(gpiostr), "%s", gpio_tbl[gpio]);
 	if (open_write_close("/sys/class/gpio/unexport", gpiostr) < 0)
 		LOG_ERROR("Couldn't unexport gpio %d", gpio);
 }
@@ -103,13 +108,16 @@ static int setup_sysfs_gpio(int gpio, int is_output, int init_high)
 {
 	struct timeval timeout, now;
 	char buf[40];
-	char gpiostr[5];
+	char gpiostr[6];
 	int ret;
+	gpio_tbl[399] = "PI.00";
+	gpio_tbl[400] = "PI.01";
+	gpio_tbl[472] = "PY.02";
 
 	if (!is_gpio_valid(gpio))
 		return ERROR_OK;
 
-	snprintf(gpiostr, sizeof(gpiostr), "%d", gpio);
+	snprintf(gpiostr, sizeof(gpiostr), "%s", gpio_tbl[gpio]);
 	ret = open_write_close("/sys/class/gpio/export", gpiostr);
 	if (ret < 0) {
 		if (errno == EBUSY) {
@@ -124,7 +132,7 @@ static int setup_sysfs_gpio(int gpio, int is_output, int init_high)
 	gettimeofday(&timeout, NULL);
 	timeval_add_time(&timeout, 0, 500000);
 
-	snprintf(buf, sizeof(buf), "/sys/class/gpio/gpio%d/direction", gpio);
+	snprintf(buf, sizeof(buf), "/sys/class/gpio/%s/direction", gpio_tbl[gpio]);
 	for (;;) {
 		ret = open_write_close(buf, is_output ? (init_high ? "high" : "low") : "in");
 		if (ret >= 0 || errno != EACCES)
@@ -135,13 +143,13 @@ static int setup_sysfs_gpio(int gpio, int is_output, int init_high)
 		jtag_sleep(10000);
 	}
 	if (ret < 0) {
-		LOG_ERROR("Couldn't set direction for gpio %d", gpio);
+		LOG_ERROR("Couldn't set direction for gpio %s", gpio_tbl[gpio]);
 		LOG_ERROR("sysfsgpio: %s", strerror(errno));
 		unexport_sysfs_gpio(gpio);
 		return ERROR_FAIL;
 	}
 
-	snprintf(buf, sizeof(buf), "/sys/class/gpio/gpio%d/value", gpio);
+	snprintf(buf, sizeof(buf), "/sys/class/gpio/%s/value", gpio_tbl[gpio]);
 	for (;;) {
 		ret = open(buf, O_RDWR | O_NONBLOCK | O_SYNC);
 		if (ret >= 0 || errno != EACCES)
@@ -152,7 +160,7 @@ static int setup_sysfs_gpio(int gpio, int is_output, int init_high)
 		jtag_sleep(10000);
 	}
 	if (ret < 0) {
-		LOG_ERROR("Couldn't open value for gpio %d", gpio);
+		LOG_ERROR("Couldn't open value for gpio %s", gpio_tbl[gpio]);
 		LOG_ERROR("sysfsgpio: %s", strerror(errno));
 		unexport_sysfs_gpio(gpio);
 	}
@@ -192,11 +200,13 @@ static void sysfsgpio_swdio_drive(bool is_output)
 {
 	char buf[40];
 	int ret;
-
-	snprintf(buf, sizeof(buf), "/sys/class/gpio/gpio%d/direction", swdio_gpio);
+	gpio_tbl[399] = "PI.00";
+	gpio_tbl[400] = "PI.01";
+	gpio_tbl[472] = "PY.02";
+	snprintf(buf, sizeof(buf), "/sys/class/gpio/%s/direction", gpio_tbl[swdio_gpio]);
 	ret = open_write_close(buf, is_output ? "high" : "in");
 	if (ret < 0) {
-		LOG_ERROR("Couldn't set direction for gpio %d", swdio_gpio);
+		LOG_ERROR("Couldn't set direction for gpio %s", gpio_tbl[swdio_gpio]);
 		LOG_ERROR("sysfsgpio: %s", strerror(errno));
 	}
 
